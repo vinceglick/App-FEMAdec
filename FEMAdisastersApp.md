@@ -1,0 +1,138 @@
+FEMA Disaster Declarations App
+========================================================
+author: Vince GLick
+date: Saturday, June 20, 2015
+
+FEMA Disaster Declarations App
+========================================================
+The disasters declaration Shiny application can be found at: 
+https://vinceglick.shinyapps.io/App-FEMAdec
+
+The purpose of this application is to achieve the following:
+
+- Provide the user with an interface for choosing disasters based on their type
+- Map those incidents interactively
+- Provide  the user with details for each disaster point
+
+App Data
+========================================================
+All of the data for this app was provided by the following sources:
+
+- http://www.fema.gov/data-feeds
+- CRAN zipcodes data package authored by Jeffrey Breen
+
+Libraries utilized:
+
+- shiny
+- googleVis
+
+
+Disaster Declaration Data Processing
+========================================================
+
+In order to process this data for interactive utilization, the code below was invoked:
+
+
+```r
+data2<-na.omit(read.csv("FEMAdecs.csv"))
+data2<-data2[2:32305,c(6,9,10,11,12,14,15),]
+names(data2)[1:7]<- c("State","IncidentType","Title",
+    "IncidentBeginDate","IncidentEndDate",
+    "Zip","County")
+data2<-data2[2:32305,]
+```
+
+Cont.
+========================================================
+
+```r
+trial<-data.frame(data2,gsub('(County)', '', data2$County))
+data3<-data.frame(trial, gsub("\\s*\\([^\\)]+\\)","",as.character(trial$County)))
+data3$Location <- do.call(paste, c(data3[c(1, 9)], sep = ",")) 
+data3<-data3[,c(1:6,10)]
+data(zipcode)
+zdat<-transform(zipcode, Location=interaction(state,city,sep=','))
+```
+
+Cont.
+========================================================
+
+```r
+#Merge Zipcode Data (zdat) and FEMA Disaster Data (data3) for geolocation lookup prep
+geodat<-merge(data3,zdat,by="Location")
+geodat$latlong<-paste(geodat$latitude, geodat$longitude, sep = ':')
+geodat$IncidentBeginDate<-
+  as.POSIXct(geodat$IncidentBeginDate, format = "%m/%d/%Y")
+geodat$IncidentEndDate<-
+  as.POSIXct(geodat$IncidentEndDate, format = "%m/%d/%Y")
+geodat$tip<-paste(geodat$Title,' ',geodat$IncidentBeginDate,' ',geodat$latlong,' ',geodat$Location)
+```
+
+Providing Interactive Layout - Server
+========================================================
+
+Reactivity with googleVis gvisMap interface was introduced through the server.R file as follows:
+
+
+```r
+shinyServer(function(input, output){
+  dataInput<-reactive({
+  
+    switch(input$incidents,
+           choices=levels(geodat$IncidentType))
+  }
+  )
+```
+
+Cont.
+========================================================
+
+```r
+output$gvis<-renderGvis({
+  subDat<-subset(geodat, geodat$IncidentType %in% input$incidents)
+  gvisMap(subDat,locationvar='latlong','tip',
+               options=list(showTip=TRUE, 
+                            showLine=TRUE, 
+                            enableScrollWheel=TRUE,
+                            mapType='terrain', 
+                            useMapTypeControl=TRUE))
+```
+
+Providing Interactive Layout - UI
+========================================================
+
+Reactivity with googleVis gvisMap interface was introduced through the ui.R file as follows:
+
+
+```r
+shinyUI(pageWithSidebar(
+  headerPanel(textOutput("FEMA Disaster Reporting")),
+  sidebarPanel(
+    titlePanel("FEMA Disaster Reporting"),
+    selectInput("incidents", "Choose Incident:", choices = levels(geodat$IncidentType))
+    
+    ),
+```
+
+Cont.
+========================================================
+
+```r
+  mainPanel(
+    h5("All FEMA Disaster Declaration Data is provided by:"),
+    a("http://www.fema.gov/data-feeds", href="http://www.fema.gov/data-feeds"),
+    h5("Zoom/Scroll-in and highlight over markers to display descriptive values"),
+    htmlOutput("gvis"),
+    h5("By Vince Glick"), 
+    a("LinkedIn", href="http://www.vinceglick.com"),
+    a("Github", href="http://github.com/vinceglick")
+    
+  ))
+)
+```
+
+Application Dashboard
+========================================================
+
+!['FEMAapp.png'](FEMAapp.png)
+
